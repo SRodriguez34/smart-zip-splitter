@@ -24,6 +24,7 @@ import { useAppState, useAppActions } from '@/hooks/use-app-state';
 import { useProcessing } from '@/hooks/use-processing';
 import { useStrategySelection } from '@/hooks/use-strategy-selection';
 import { useErrorHandling } from '@/hooks/use-error-handling';
+import { GoogleAuthFlow } from './google-auth-flow';
 import type { FileUploadProps, FileInfo, UploadError, ProcessingStrategy } from '@/types/ui';
 
 /**
@@ -138,6 +139,22 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
       }
 
       try {
+        // Check if file requires Google Drive and user is not authenticated
+        const requiredStrategy = determineStrategy(file.size);
+        if (requiredStrategy === 'CLIENT_DRIVE' && !state.isGoogleAuthenticated) {
+          // Set file but don't analyze yet - user needs to authenticate first
+          actions.setFile(file);
+          
+          // Show notification about authentication requirement
+          actions.addNotification({
+            type: 'info',
+            title: 'Google Drive Authentication Required',
+            message: `Files larger than 100MB require Google Drive integration. Please sign in to continue.`
+          });
+          
+          return;
+        }
+        
         // Set file in global state
         actions.setFile(file);
         
@@ -151,7 +168,7 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
           size: file.size,
           type: file.type,
           lastModified: file.lastModified,
-          strategy: determineStrategy(file.size),
+          strategy: requiredStrategy,
         };
 
         onFileSelect?.(fileInfo);
@@ -181,8 +198,32 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
     actions.clearFile();
   };
 
+  // Check if we need to show Google auth for large files
+  const needsGoogleAuth = state.currentFile && 
+    determineStrategy(state.currentFile.size) === 'CLIENT_DRIVE' && 
+    !state.isGoogleAuthenticated;
+
   return (
     <div className={className}>
+      {/* Google Auth Flow for large files */}
+      {needsGoogleAuth && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <GoogleAuthFlow 
+            onAuthSuccess={() => {
+              // After successful auth, analyze the file
+              if (state.currentFile) {
+                analyzeCurrentFile();
+              }
+            }}
+            showPermissionDetails={true}
+          />
+        </motion.div>
+      )}
+
       <AnimatePresence mode="wait">
         {!state.currentFile ? (
           <motion.div

@@ -6,6 +6,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useAppState, useAppActions } from './use-app-state';
 import { useZipWorker } from './useZipWorker';
+import { useGoogleDrive } from './use-google-drive';
 import { ZipProcessor } from '@/lib/zip-processor';
 import { DriveProcessor } from '@/lib/drive-processor';
 import { DownloadManager } from '@/lib/download-manager';
@@ -68,6 +69,9 @@ export function useProcessing(): ProcessingHookReturn {
   
   // Hook para Web Worker
   const [workerState, workerActions] = useZipWorker();
+  
+  // Hook para Google Drive
+  const googleDrive = useGoogleDrive();
 
   // Inicializar procesadores
   useEffect(() => {
@@ -283,12 +287,27 @@ export function useProcessing(): ProcessingHookReturn {
         if (!state.isGoogleAuthenticated) {
           throw new Error('Google Drive authentication required');
         }
-        result = await driveProcessorRef.current!.processFile(state.currentFile, {
-          ...processingOptions,
-          createPublicLinks: true,
-          organizeFolders: true,
-          includeManifestInDrive: true
-        });
+        
+        // Usar nuestro hook de Google Drive directamente
+        actions.setStatus('uploading');
+        
+        // Procesar archivo localmente primero
+        const localResult = await zipProcessorRef.current!.processFile(state.currentFile, processingOptions);
+        if (!localResult.success) {
+          throw new Error(localResult.error?.message || 'Local processing failed');
+        }
+        
+        // Subir fragmentos a Google Drive
+        const driveResult = await googleDrive.uploadFragments(localResult.fragments!, localResult.manifest);
+        
+        // Crear resultado combinado
+        result = {
+          ...localResult,
+          driveFolder: driveResult.folder,
+          driveFiles: driveResult.files,
+          shareableManifest: driveResult.spreadsheet?.spreadsheetUrl,
+          driveSpreadsheet: driveResult.spreadsheet
+        } as any;
       } else {
         throw new Error(`Strategy ${strategy} not implemented`);
       }
@@ -436,43 +455,14 @@ export function useProcessing(): ProcessingHookReturn {
     }
   }, [state.downloadBatch]);
 
-  // Autenticación Google Drive
+  // Autenticación Google Drive - delegar a nuestro hook
   const signInToGoogle = useCallback(async () => {
-    try {
-      await driveProcessorRef.current?.signIn();
-      actions.addNotification({
-        type: 'success',
-        title: 'Google Drive connected',
-        message: 'You can now use Google Drive integration'
-      });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Google sign-in failed';
-      actions.addNotification({
-        type: 'error',
-        title: 'Sign-in failed',
-        message: errorMsg
-      });
-    }
-  }, [actions]);
+    await googleDrive.signIn();
+  }, [googleDrive]);
 
   const signOutOfGoogle = useCallback(async () => {
-    try {
-      await driveProcessorRef.current?.signOut();
-      actions.clearGoogleAuth();
-      actions.addNotification({
-        type: 'info',
-        title: 'Signed out',
-        message: 'Disconnected from Google Drive'
-      });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Sign-out failed';
-      actions.addNotification({
-        type: 'error',
-        title: 'Sign-out failed',
-        message: errorMsg
-      });
-    }
-  }, [actions]);
+    await googleDrive.signOut();
+  }, [googleDrive]);
 
   // Utilidades
   const estimateProcessingTime = useCallback((strategy?: ProcessingStrategyType) => {

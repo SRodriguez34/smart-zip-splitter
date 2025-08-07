@@ -14,7 +14,8 @@ import { FileUploader } from '@/components/file-uploader';
 import { ProgressBar } from '@/components/progress-bar';
 import { NotificationSystem } from '@/components/notification-system';
 import { AdvancedSettings } from '@/components/advanced-settings';
-import { AppStateProvider } from '@/hooks/use-app-state';
+import { ShareResults } from '@/components/share-results';
+import { AppStateProvider, useAppState } from '@/hooks/use-app-state';
 import { 
   Upload, 
   Zap, 
@@ -29,6 +30,8 @@ import {
 import type { FileInfo, UploadError, ProgressInfo } from '@/types/ui';
 
 function HomePageContent() {
+  const { state } = useAppState();
+  
   const handleFileSelect = (fileInfo: FileInfo) => {
     // File handling is now managed by global state
     console.log('File selected:', fileInfo.name);
@@ -346,6 +349,19 @@ function HomePageContent() {
             <AdvancedSettings
               className="w-full"
             />
+            
+            {/* Show share results after successful Google Drive upload */}
+            {state.status === 'complete' && 
+             state.selectedStrategy?.type === 'CLIENT_DRIVE' && 
+             state.googleDriveData && (
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.3 }}
+              >
+                <ShareResults className="w-full" />
+              </motion.div>
+            )}
           </motion.div>
         </div>
       </section>

@@ -22,6 +22,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAppState } from '@/hooks/use-app-state';
 import { useProcessing } from '@/hooks/use-processing';
+import { useGoogleDrive } from '@/hooks/use-google-drive';
+import { DriveUploadProgress } from './drive-upload-progress';
 import type { ProgressBarProps, ProgressState } from '@/types/ui';
 
 /**
@@ -134,6 +136,7 @@ interface ProgressBarComponentProps {
 export function ProgressBar({ className }: ProgressBarComponentProps) {
   const { state } = useAppState();
   const { startProcessing, startDownload, canStartProcessing, isProcessing } = useProcessing();
+  const { uploadProgress, totalUploadProgress } = useGoogleDrive();
   const [displayPercentage, setDisplayPercentage] = useState(0);
 
   // Map app status to progress state
@@ -153,19 +156,26 @@ export function ProgressBar({ className }: ProgressBarComponentProps) {
   );
   const IconComponent = config.icon;
 
-  // Smooth percentage animation
+  // Smooth percentage animation - use Google Drive progress when uploading
   useEffect(() => {
     if (progressState === 'idle') {
       setDisplayPercentage(0);
       return;
     }
 
+    let targetPercentage = state.progress.overall;
+    
+    // Use Google Drive upload progress when uploading to Drive
+    if (progressState === 'uploading' && state.selectedStrategy?.type === 'CLIENT_DRIVE' && uploadProgress.length > 0) {
+      targetPercentage = totalUploadProgress;
+    }
+
     const timer = setTimeout(() => {
-      setDisplayPercentage(state.progress.overall);
+      setDisplayPercentage(targetPercentage);
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [state.progress.overall, progressState]);
+  }, [state.progress.overall, progressState, totalUploadProgress, uploadProgress.length, state.selectedStrategy]);
 
   // Show progress only when there's a file and some activity
   if (progressState === 'idle' || !state.currentFile) {
@@ -377,6 +387,23 @@ export function ProgressBar({ className }: ProgressBarComponentProps) {
           </AnimatePresence>
         </CardContent>
       </Card>
+      
+      {/* Google Drive Upload Progress - show detailed upload progress when uploading to Drive */}
+      <AnimatePresence>
+        {progressState === 'uploading' && 
+         state.selectedStrategy?.type === 'CLIENT_DRIVE' && 
+         uploadProgress.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="mt-4"
+          >
+            <DriveUploadProgress />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
