@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -12,6 +12,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { FileUploader } from '@/components/file-uploader';
 import { ProgressBar } from '@/components/progress-bar';
+import { NotificationSystem } from '@/components/notification-system';
+import { AdvancedSettings } from '@/components/advanced-settings';
+import { AppStateProvider } from '@/hooks/use-app-state';
 import { 
   Upload, 
   Zap, 
@@ -25,30 +28,15 @@ import {
 } from 'lucide-react';
 import type { FileInfo, UploadError, ProgressInfo } from '@/types/ui';
 
-export default function HomePage() {
-  const [, setSelectedFile] = useState<FileInfo | null>(null);
-  const [progress, setProgress] = useState<ProgressInfo>({
-    state: 'idle',
-    percentage: 0,
-    message: '',
-  });
-
+function HomePageContent() {
   const handleFileSelect = (fileInfo: FileInfo) => {
-    setSelectedFile(fileInfo);
-    // Simulate progress for demo
-    setProgress({
-      state: 'analyzing',
-      percentage: 25,
-      message: 'Analyzing your ZIP file...',
-      estimatedTime: 30,
-      strategy: fileInfo.strategy,
-    });
+    // File handling is now managed by global state
+    console.log('File selected:', fileInfo.name);
   };
 
   const handleError = (error: UploadError) => {
-    // eslint-disable-next-line no-console
+    // Error handling is now managed by global state
     console.error('Upload error:', error);
-    setProgress({ state: 'idle', percentage: 0, message: '' });
   };
 
   const scrollToUploader = () => {
@@ -352,12 +340,24 @@ export default function HomePage() {
             />
             
             <ProgressBar
-              progress={progress}
+              className="w-full"
+            />
+            
+            <AdvancedSettings
               className="w-full"
             />
           </motion.div>
         </div>
       </section>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <AppStateProvider>
+      <HomePageContent />
+      <NotificationSystem />
+    </AppStateProvider>
   );
 }

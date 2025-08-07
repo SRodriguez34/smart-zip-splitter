@@ -4,7 +4,7 @@
  */
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -14,10 +14,16 @@ import {
   CheckCircle, 
   X,
   HardDrive,
-  Zap
+  Zap,
+  Loader2,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useAppState, useAppActions } from '@/hooks/use-app-state';
+import { useProcessing } from '@/hooks/use-processing';
+import { useStrategySelection } from '@/hooks/use-strategy-selection';
+import { useErrorHandling } from '@/hooks/use-error-handling';
 import type { FileUploadProps, FileInfo, UploadError, ProcessingStrategy } from '@/types/ui';
 
 /**
@@ -76,13 +82,15 @@ const validateFile = (file: File): UploadError | null => {
 };
 
 export function FileUploader({ onFileSelect, onError, className, disabled }: FileUploadProps) {
-  const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
-  const [error, setError] = useState<UploadError | null>(null);
+  const { state } = useAppState();
+  const actions = useAppActions();
+  const { validateFile, analyzeCurrentFile, capabilities } = useProcessing();
+  const { availableStrategies, selectStrategy } = useStrategySelection();
+  const { reportError } = useErrorHandling();
 
-  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: any[]) => {
     // Clear previous state
-    setError(null);
-    setSelectedFile(null);
+    actions.clearError();
 
     // Handle rejected files
     if (rejectedFiles.length > 0) {
@@ -92,39 +100,70 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
         message: 'File rejected',
         details: rejection.errors[0]?.message || 'File was rejected'
       };
-      setError(error);
-      onError(error);
+      
+      reportError({
+        code: 'FILE_REJECTED',
+        message: error.message,
+        recoverable: true,
+        suggestedAction: error.details
+      }, { component: 'FileUploader', action: 'file_drop' });
+      
+      onError?.(error);
       return;
     }
 
     // Handle accepted file
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
-      
       if (!file) return;
       
       // Validate file
-      const validationError = validateFile(file);
-      if (validationError) {
-        setError(validationError);
-        onError(validationError);
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        const error: UploadError = {
+          code: 'VALIDATION_FAILED',
+          message: 'File validation failed',
+          details: validation.error || 'Unknown validation error'
+        };
+        
+        reportError({
+          code: 'VALIDATION_FAILED',
+          message: validation.error || 'File validation failed',
+          recoverable: true,
+          suggestedAction: 'Please select a valid ZIP file'
+        }, { component: 'FileUploader', action: 'file_validation' });
+        
+        onError?.(error);
         return;
       }
 
-      // Create file info
-      const fileInfo: FileInfo = {
-        file,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-        strategy: determineStrategy(file.size),
-      };
+      try {
+        // Set file in global state
+        actions.setFile(file);
+        
+        // Auto-analyze file
+        await analyzeCurrentFile();
+        
+        // Create file info for callback compatibility
+        const fileInfo: FileInfo = {
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          lastModified: file.lastModified,
+          strategy: determineStrategy(file.size),
+        };
 
-      setSelectedFile(fileInfo);
-      onFileSelect(fileInfo);
+        onFileSelect?.(fileInfo);
+        
+      } catch (error) {
+        reportError(error as Error, { 
+          component: 'FileUploader', 
+          action: 'file_analysis' 
+        });
+      }
     }
-  }, [onFileSelect, onError]);
+  }, [actions, analyzeCurrentFile, validateFile, reportError, onFileSelect, onError]);
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
@@ -139,14 +178,13 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
   });
 
   const clearSelection = () => {
-    setSelectedFile(null);
-    setError(null);
+    actions.clearFile();
   };
 
   return (
     <div className={className}>
       <AnimatePresence mode="wait">
-        {!selectedFile ? (
+        {!state.currentFile ? (
           <motion.div
             key="uploader"
             initial={{ opacity: 0, y: 20 }}
@@ -161,7 +199,7 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
                 ${isDragActive && !isDragReject ? 'border-upload-dragover-border bg-upload-dragover' : ''}
                 ${isDragReject ? 'border-status-error-border bg-status-error' : ''}
                 ${!isDragActive && !isDragReject ? 'border-upload-idle-border bg-upload-idle hover:border-upload-hover-border hover:bg-upload-hover' : ''}
-                ${disabled ? 'cursor-not-allowed opacity-50' : ''}
+                ${disabled || state.status === 'analyzing' ? 'cursor-not-allowed opacity-50' : ''}
               `}
               aria-label="Drop ZIP file here or click to browse"
               role="button"
@@ -175,7 +213,9 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
                 transition={{ duration: 0.2 }}
                 className="mx-auto mb-4"
               >
-                {isDragReject ? (
+                {state.status === 'analyzing' ? (
+                  <Loader2 className="mx-auto h-16 w-16 text-brand-primary animate-spin" />
+                ) : isDragReject ? (
                   <AlertCircle className="mx-auto h-16 w-16 text-status-error-border" />
                 ) : (
                   <Upload className="mx-auto h-16 w-16 text-slate-400" />
@@ -185,13 +225,17 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
               {/* Upload Text */}
               <div className="space-y-2">
                 <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                  {isDragActive ? 
+                  {state.status === 'analyzing' ? 'Analyzing ZIP file...' :
+                   isDragActive ? 
                     (isDragReject ? 'Invalid file type' : 'Drop your ZIP file here') :
                     'Drop your ZIP file here'
                   }
                 </h3>
                 <p id="file-upload-description" className="text-sm text-slate-600 dark:text-slate-400">
-                  or <span className="font-medium text-brand-primary">click to browse</span>
+                  {state.status === 'analyzing' ? 
+                    'Please wait while we analyze your file' :
+                    <>or <span className="font-medium text-brand-primary">click to browse</span></>
+                  }
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500">
                   Supports ZIP files up to 10GB
@@ -236,39 +280,59 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center space-x-2">
                         <h3 className="font-semibold text-slate-900 dark:text-white truncate">
-                          {selectedFile.name}
+                          {state.currentFile.name}
                         </h3>
-                        <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                        {state.fileAnalysis ? (
+                          <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                        ) : state.status === 'analyzing' ? (
+                          <Loader2 className="h-5 w-5 text-brand-primary animate-spin flex-shrink-0" />
+                        ) : null}
                       </div>
                       
                       <div className="space-y-1 text-sm text-slate-600 dark:text-slate-400">
-                        <p>Size: <span className="font-medium">{formatFileSize(selectedFile.size)}</span></p>
+                        <p>Size: <span className="font-medium">{formatFileSize(state.currentFile.size)}</span></p>
                         <p>Modified: <span className="font-medium">
-                          {new Date(selectedFile.lastModified).toLocaleDateString()}
+                          {new Date(state.currentFile.lastModified).toLocaleDateString()}
                         </span></p>
+                        {state.fileAnalysis && (
+                          <p>Entries: <span className="font-medium">{state.fileAnalysis.entryCount.toLocaleString()}</span></p>
+                        )}
                       </div>
 
                       {/* Strategy Badge */}
                       <div className="flex items-center space-x-2">
-                        <div className={`
-                          inline-flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium
-                          ${selectedFile.strategy === 'CLIENT_SIDE' 
-                            ? 'bg-brand-primary-light text-brand-primary' 
-                            : 'bg-brand-accent-light text-brand-accent'
-                          }
-                        `}>
-                          {selectedFile.strategy === 'CLIENT_SIDE' ? (
-                            <>
-                              <Zap className="h-3 w-3" />
-                              <span>Lightning Fast</span>
-                            </>
-                          ) : (
-                            <>
-                              <HardDrive className="h-3 w-3" />
-                              <span>Smart Integration</span>
-                            </>
-                          )}
-                        </div>
+                        {state.selectedStrategy ? (
+                          <div className={`
+                            inline-flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium
+                            ${state.selectedStrategy.type === 'CLIENT_SIDE' 
+                              ? 'bg-brand-primary-light text-brand-primary' 
+                              : 'bg-brand-accent-light text-brand-accent'
+                            }
+                          `}>
+                            {state.selectedStrategy.type === 'CLIENT_SIDE' ? (
+                              <>
+                                <Zap className="h-3 w-3" />
+                                <span>{state.selectedStrategy.name}</span>
+                              </>
+                            ) : (
+                              <>
+                                <HardDrive className="h-3 w-3" />
+                                <span>{state.selectedStrategy.name}</span>
+                              </>
+                            )}
+                          </div>
+                        ) : state.status === 'analyzing' ? (
+                          <div className="inline-flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">
+                            <BarChart3 className="h-3 w-3" />
+                            <span>Analyzing...</span>
+                          </div>
+                        ) : null}
+                        
+                        {state.fileAnalysis && (
+                          <div className="text-xs text-slate-500">
+                            Est: {state.fileAnalysis.estimatedProcessingTime}s
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -291,7 +355,7 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
 
       {/* Error Display */}
       <AnimatePresence>
-        {error && (
+        {state.error && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -304,8 +368,10 @@ export function FileUploader({ onFileSelect, onError, className, disabled }: Fil
                 <div className="flex items-start space-x-3">
                   <AlertCircle className="h-5 w-5 text-status-error-border flex-shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <p className="font-medium text-slate-900">{error.message}</p>
-                    <p className="text-sm text-slate-600">{error.details}</p>
+                    <p className="font-medium text-slate-900">{state.error.message}</p>
+                    {state.error.suggestedAction && (
+                      <p className="text-sm text-slate-600">{state.error.suggestedAction}</p>
+                    )}
                   </div>
                 </div>
               </CardContent>

@@ -12,10 +12,16 @@ import {
   Search, 
   Cog, 
   Upload,
-  Clock
+  Clock,
+  Download,
+  HardDrive,
+  Zap
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useAppState } from '@/hooks/use-app-state';
+import { useProcessing } from '@/hooks/use-processing';
 import type { ProgressBarProps, ProgressState } from '@/types/ui';
 
 /**
@@ -121,29 +127,48 @@ const getContextualMessage = (state: ProgressState, percentage: number, strategy
   }
 };
 
-export function ProgressBar({ progress, className }: ProgressBarProps) {
+interface ProgressBarComponentProps {
+  className?: string;
+}
+
+export function ProgressBar({ className }: ProgressBarComponentProps) {
+  const { state } = useAppState();
+  const { startProcessing, startDownload, canStartProcessing, isProcessing } = useProcessing();
   const [displayPercentage, setDisplayPercentage] = useState(0);
-  const { state, percentage, message, estimatedTime, strategy } = progress;
-  
-  const config = getStateConfig(state);
-  const contextualMessage = message || getContextualMessage(state, percentage, strategy);
+
+  // Map app status to progress state
+  const progressState: ProgressState = state.status === 'idle' ? 'idle' :
+                                      state.status === 'analyzing' ? 'analyzing' :
+                                      state.status === 'processing' ? 'processing' :
+                                      state.status === 'uploading' ? 'uploading' :
+                                      state.status === 'downloading' ? 'uploading' :
+                                      state.status === 'complete' ? 'complete' :
+                                      state.status === 'error' ? 'error' : 'idle';
+
+  const config = getStateConfig(progressState);
+  const contextualMessage = state.progress.message || getContextualMessage(
+    progressState, 
+    state.progress.overall, 
+    state.selectedStrategy?.type
+  );
   const IconComponent = config.icon;
 
   // Smooth percentage animation
   useEffect(() => {
-    if (state === 'idle') {
+    if (progressState === 'idle') {
       setDisplayPercentage(0);
       return;
     }
 
     const timer = setTimeout(() => {
-      setDisplayPercentage(percentage);
+      setDisplayPercentage(state.progress.overall);
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [percentage, state]);
+  }, [state.progress.overall, progressState]);
 
-  if (state === 'idle') {
+  // Show progress only when there's a file and some activity
+  if (progressState === 'idle' || !state.currentFile) {
     return null;
   }
 
@@ -163,7 +188,7 @@ export function ProgressBar({ progress, className }: ProgressBarProps) {
               <AnimatePresence mode="wait">
                 {IconComponent && (
                   <motion.div
-                    key={state}
+                    key={progressState}
                     initial={{ scale: 0, rotate: -180 }}
                     animate={{ scale: 1, rotate: 0 }}
                     exit={{ scale: 0, rotate: 180 }}
@@ -171,7 +196,7 @@ export function ProgressBar({ progress, className }: ProgressBarProps) {
                     className={`
                       flex h-8 w-8 items-center justify-center rounded-full 
                       ${config.color}
-                      ${state === 'processing' || state === 'analyzing' ? 'animate-spin' : ''}
+                      ${progressState === 'processing' || progressState === 'analyzing' ? 'animate-spin' : ''}
                     `}
                   >
                     <IconComponent className="h-5 w-5" />
@@ -181,25 +206,25 @@ export function ProgressBar({ progress, className }: ProgressBarProps) {
               
               <div>
                 <h3 className="font-semibold text-slate-900 dark:text-white">
-                  {state.charAt(0).toUpperCase() + state.slice(1).replace('_', ' ')}
+                  {progressState.charAt(0).toUpperCase() + progressState.slice(1).replace('_', ' ')}
                 </h3>
-                {strategy && (
+                {state.selectedStrategy && (
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    {strategy === 'CLIENT_SIDE' ? 'Client-side processing' : 'Google Drive integration'}
+                    {state.selectedStrategy.type === 'CLIENT_SIDE' ? 'Client-side processing' : 'Google Drive integration'}
                   </p>
                 )}
               </div>
             </div>
 
             {/* Time Estimation */}
-            {estimatedTime && estimatedTime > 0 && state !== 'complete' && state !== 'error' && (
+            {state.progress.estimatedTimeLeft > 0 && progressState !== 'complete' && progressState !== 'error' && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="flex items-center space-x-1 text-sm text-slate-600 dark:text-slate-400"
               >
                 <Clock className="h-4 w-4" />
-                <span>{formatTime(estimatedTime)}</span>
+                <span>{formatTime(state.progress.estimatedTimeLeft)}</span>
               </motion.div>
             )}
           </div>
@@ -222,7 +247,7 @@ export function ProgressBar({ progress, className }: ProgressBarProps) {
               />
               
               {/* Animated shimmer effect for processing states */}
-              {(state === 'processing' || state === 'analyzing' || state === 'uploading') && (
+              {(progressState === 'processing' || progressState === 'analyzing' || progressState === 'uploading') && (
                 <motion.div
                   className="absolute inset-0 rounded-full opacity-30"
                   animate={{
@@ -242,25 +267,96 @@ export function ProgressBar({ progress, className }: ProgressBarProps) {
             </div>
           </div>
 
-          {/* Success/Error Additional Info */}
+          {/* Action Buttons */}
           <AnimatePresence>
-            {state === 'complete' && (
+            {progressState === 'idle' && canStartProcessing && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.3 }}
-                className="mt-4 p-3 rounded-lg bg-green-50 border border-green-200"
+                className="mt-4 flex items-center justify-between"
               >
-                <p className="text-sm text-green-800">
-                  🎉 Processing completed successfully! 
-                  {strategy === 'CLIENT_SIDE' && ' Your files are ready for download.'}
-                  {strategy === 'CLIENT_DRIVE' && ' Check your Google Drive for the split files.'}
-                </p>
+                <div className="flex items-center space-x-2 text-sm text-slate-600">
+                  {state.selectedStrategy?.type === 'CLIENT_SIDE' ? (
+                    <>
+                      <Zap className="h-4 w-4 text-brand-primary" />
+                      <span>Ready for lightning-fast processing</span>
+                    </>
+                  ) : (
+                    <>
+                      <HardDrive className="h-4 w-4 text-brand-accent" />
+                      <span>Ready for Google Drive integration</span>
+                    </>
+                  )}
+                </div>
+                <Button
+                  onClick={startProcessing}
+                  disabled={isProcessing}
+                  size="sm"
+                  className="bg-brand-primary hover:bg-brand-primary-hover"
+                >
+                  Start Processing
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Success/Error Additional Info */}
+          <AnimatePresence>
+            {progressState === 'complete' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3 }}
+                className="mt-4 space-y-3"
+              >
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                  <p className="text-sm text-green-800">
+                    🎉 Processing completed successfully! 
+                    {state.selectedStrategy?.type === 'CLIENT_SIDE' && ' Your files are ready for download.'}
+                    {state.selectedStrategy?.type === 'CLIENT_DRIVE' && ' Check your Google Drive for the split files.'}
+                  </p>
+                </div>
+                
+                {state.fragments && state.fragments.length > 0 && state.selectedStrategy?.type === 'CLIENT_SIDE' && (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-slate-600">
+                      {state.fragments.length} fragment{state.fragments.length !== 1 ? 's' : ''} created
+                    </div>
+                    <Button
+                      onClick={startDownload}
+                      size="sm"
+                      variant="outline"
+                      className="border-green-300 text-green-700 hover:bg-green-50"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download All
+                    </Button>
+                  </div>
+                )}
+
+                {state.googleDriveData && state.selectedStrategy?.type === 'CLIENT_DRIVE' && (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-slate-600">
+                      Files uploaded to Google Drive
+                    </div>
+                    <Button
+                      onClick={() => window.open(state.googleDriveData?.shareUrl, '_blank')}
+                      size="sm"
+                      variant="outline"
+                      className="border-green-300 text-green-700 hover:bg-green-50"
+                    >
+                      <HardDrive className="h-4 w-4 mr-2" />
+                      View in Drive
+                    </Button>
+                  </div>
+                )}
               </motion.div>
             )}
 
-            {state === 'error' && (
+            {progressState === 'error' && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -268,10 +364,14 @@ export function ProgressBar({ progress, className }: ProgressBarProps) {
                 transition={{ duration: 0.3 }}
                 className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200"
               >
-                <p className="text-sm text-red-800">
-                  ❌ Processing failed. Please check your file and try again.
-                  If the problem persists, try with a smaller file.
+                <p className="text-sm text-red-800 mb-2">
+                  ❌ {state.error?.message || 'Processing failed. Please check your file and try again.'}
                 </p>
+                {state.error?.suggestedAction && (
+                  <p className="text-xs text-red-600">
+                    💡 {state.error.suggestedAction}
+                  </p>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
