@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom styles for Smart ZIP Splitter */
+@layer components {
+  /* File Upload Zones */
+  .upload-zone {
+    @apply rounded-xl border-2 border-dashed transition-all duration-200;
+  }
+
+  .upload-zone-idle {
+    @apply border-upload-idle-border bg-upload-idle;
+  }
+
+  .upload-zone-hover {
+    @apply border-upload-hover-border bg-upload-hover;
+  }
+
+  .upload-zone-dragover {
+    @apply border-upload-dragover-border bg-upload-dragover;
+  }
+
+  .upload-zone-selected {
+    @apply border-upload-selected-border bg-upload-selected;
+  }
+
+  /* Status Indicators */
+  .status-processing {
+    @apply rounded-lg border border-status-processing-border bg-status-processing;
+  }
+
+  .status-success {
+    @apply rounded-lg border border-status-success-border bg-status-success;
+  }
+
+  .status-error {
+    @apply rounded-lg border border-status-error-border bg-status-error;
+  }
+
+  .status-warning {
+    @apply rounded-lg border border-status-warning-border bg-status-warning;
+  }
+
+  /* Button Variants */
+  .btn-primary {
+    @apply bg-brand-primary hover:bg-brand-primary-hover text-white;
+  }
+
+  .btn-secondary {
+    @apply bg-brand-secondary hover:bg-brand-secondary-hover text-white;
+  }
+
+  .btn-accent {
+    @apply bg-brand-accent hover:bg-brand-accent text-white;
+  }
+
+  /* Glass Effect */
+  .glass {
+    @apply backdrop-blur-md bg-white/80 supports-[backdrop-filter]:bg-white/60;
+  }
+
+  .glass-dark {
+    @apply backdrop-blur-md bg-slate-950/80 supports-[backdrop-filter]:bg-slate-950/60;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-brand-primary to-brand-accent bg-clip-text text-transparent;
+  }
+
+  /* Card Hover Effects */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+  }
+
+  /* Focus Ring */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2 dark:focus:ring-offset-slate-800;
+  }
+}
+
+/* Animation utilities */
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.4s ease-out;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 3s infinite;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 dark:bg-slate-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply rounded bg-slate-300 dark:bg-slate-600;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-500;
+}
+
+/* Selection styling */
+::selection {
+  @apply bg-blue-200 dark:bg-blue-800;
+}
+
+/* Focus styles */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800;
+}

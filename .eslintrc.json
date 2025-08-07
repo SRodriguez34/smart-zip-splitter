@@ -1,0 +1,37 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "root": true,
+  "rules": {
+    // General rules
+    "prefer-const": "error",
+    "no-var": "error",
+    "no-console": "warn",
+    "eqeqeq": "error",
+    "no-duplicate-imports": "error",
+    "no-unused-expressions": "error",
+
+    // React rules
+    "react/prop-types": "off",
+    "react/react-in-jsx-scope": "off",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+
+    // Next.js rules
+    "@next/next/no-html-link-for-pages": "error",
+    "@next/next/no-img-element": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.worker.ts"],
+      "env": {
+        "worker": true,
+        "browser": false,
+        "node": false
+      },
+      "globals": {
+        "self": "readonly",
+        "importScripts": "readonly"
+      }
+    }
+  ]
+}

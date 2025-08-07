@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://smart-zip-splitter.vercel.app/sitemap.xml
