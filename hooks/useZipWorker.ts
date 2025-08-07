@@ -73,52 +73,11 @@ export function useZipWorker(): [ZipWorkerState, ZipWorkerActions] {
     }
 
     try {
-      // En producción, esto sería importado correctamente
-      // Para esta implementación, creamos el worker inline
-      const workerCode = `
-        // Worker code would be injected here
-        self.postMessage({ type: 'READY', id: 'init', payload: { message: 'Worker ready' } });
-        
-        self.addEventListener('message', (event) => {
-          const { type, id, payload } = event.data;
-          
-          if (type === 'PING') {
-            self.postMessage({ type: 'PONG', id, payload: { status: 'alive' } });
-          } else if (type === 'PROCESS_ZIP') {
-            // Simular procesamiento
-            setTimeout(() => {
-              self.postMessage({ 
-                type: 'PROGRESS', 
-                id, 
-                payload: { phase: 'processing', progress: 50, message: 'Processing...' }
-              });
-            }, 1000);
-            
-            setTimeout(() => {
-              self.postMessage({ 
-                type: 'COMPLETE', 
-                id, 
-                payload: { 
-                  success: true, 
-                  fragments: [], 
-                  metrics: { processingTime: 2000 }
-                }
-              });
-            }, 2000);
-          }
-        });
-      `;
-
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      const workerUrl = URL.createObjectURL(blob);
-      
-      workerRef.current = new Worker(workerUrl);
+      // Crear worker desde archivo estático
+      workerRef.current = new Worker('/zip-worker.js');
       
       workerRef.current.addEventListener('message', handleWorkerMessage);
       workerRef.current.addEventListener('error', handleWorkerError);
-
-      // Limpiar URL del blob
-      setTimeout(() => URL.revokeObjectURL(workerUrl), 1000);
 
     } catch (error) {
       console.error('Failed to initialize ZIP worker:', error);
@@ -171,9 +130,11 @@ export function useZipWorker(): [ZipWorkerState, ZipWorkerActions] {
             startTime: Date.now() - (completeData.metrics?.processingTime || 0),
             endTime: Date.now(),
             totalTime: completeData.metrics?.processingTime || 0,
-            memoryUsage: 0,
-            compressionRatio: 1,
-            throughput: 0
+            memoryUsage: completeData.metrics?.originalSize || 0,
+            compressionRatio: completeData.metrics?.compressionRatio || 1,
+            throughput: completeData.metrics?.processingTime > 0 
+              ? (completeData.metrics?.originalSize || 0) / (completeData.metrics?.processingTime / 1000)
+              : 0
           }
         };
 
