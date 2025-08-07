@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - Smart ZIP Splitter</title>
+  <meta name="description" content="You're currently offline. Smart ZIP Splitter works offline for local file processing.">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .offline-container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    .offline-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 30px;
+      background: #f3f4f6;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+    }
+
+    .offline-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #1f2937;
+    }
+
+    .offline-subtitle {
+      font-size: 18px;
+      color: #6b7280;
+      margin-bottom: 30px;
+      line-height: 1.5;
+    }
+
+    .offline-features {
+      background: #f9fafb;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 30px 0;
+      text-align: left;
+    }
+
+    .offline-features h3 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      color: #4b5563;
+    }
+
+    .feature-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .feature-icon {
+      width: 20px;
+      height: 20px;
+      margin-right: 12px;
+      color: #10b981;
+    }
+
+    .offline-actions {
+      margin-top: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 14px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+    }
+
+    .btn-secondary:hover {
+      background: #e5e7eb;
+    }
+
+    .network-status {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .network-status.online {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .network-status.offline {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      display: block;
+    }
+
+    @media (max-width: 640px) {
+      .offline-container {
+        padding: 30px 20px;
+      }
+
+      .offline-title {
+        font-size: 24px;
+      }
+
+      .offline-subtitle {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-container">
+    <div class="offline-icon">
+      📱
+    </div>
+
+    <h1 class="offline-title">You're Offline</h1>
+    <p class="offline-subtitle">
+      No internet connection detected, but Smart ZIP Splitter still works for local file processing!
+    </p>
+
+    <div class="offline-features">
+      <h3>🚀 Available Offline Features</h3>
+      <div class="feature-item">
+        <span class="feature-icon">✅</span>
+        <span>Split ZIP files up to 100MB locally</span>
+      </div>
+      <div class="feature-item">
+        <span class="feature-icon">✅</span>
+        <span>Client-side processing (no uploads needed)</span>
+      </div>
+      <div class="feature-item">
+        <span class="feature-icon">✅</span>
+        <span>Download split files immediately</span>
+      </div>
+      <div class="feature-item">
+        <span class="feature-icon">✅</span>
+        <span>Custom fragment sizes and compression</span>
+      </div>
+      <div class="feature-item">
+        <span class="feature-icon">⏳</span>
+        <span>Google Drive integration (when online)</span>
+      </div>
+    </div>
+
+    <div class="offline-actions">
+      <button onclick="goToApp()" class="btn btn-primary">
+        <span>📂</span>
+        Continue to App
+      </button>
+      <button onclick="retryConnection()" class="btn btn-secondary">
+        <span>🔄</span>
+        Retry Connection
+      </button>
+    </div>
+
+    <div id="networkStatus" class="network-status offline">
+      🔴 No internet connection
+    </div>
+  </div>
+
+  <script>
+    // Network status monitoring
+    function updateNetworkStatus() {
+      const statusEl = document.getElementById('networkStatus');
+      
+      if (navigator.onLine) {
+        statusEl.textContent = '🟢 Connection restored!';
+        statusEl.className = 'network-status online';
+        
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+      } else {
+        statusEl.textContent = '🔴 No internet connection';
+        statusEl.className = 'network-status offline';
+      }
+    }
+
+    // Navigation functions
+    function goToApp() {
+      window.location.href = '/';
+    }
+
+    function retryConnection() {
+      updateNetworkStatus();
+      
+      if (navigator.onLine) {
+        window.location.reload();
+      } else {
+        // Visual feedback for retry attempt
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span>⏳</span> Checking...';
+        btn.disabled = true;
+        
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+          updateNetworkStatus();
+        }, 1500);
+      }
+    }
+
+    // Event listeners
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    
+    // Initial status check
+    updateNetworkStatus();
+
+    // Auto-redirect when online
+    if (navigator.onLine) {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
