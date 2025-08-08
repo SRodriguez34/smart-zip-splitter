@@ -343,7 +343,7 @@ export function useGoogleDrive() {
         let lastLoaded = 0;
 
         try {
-          const file = await uploadFile(
+          const file = await uploadFileWithRetry(
             fragment.blob,
             fragment.name,
             folder.id,
@@ -378,11 +378,20 @@ export function useGoogleDrive() {
 
         } catch (error) {
           console.error(`Error uploading ${fragment.name}:`, error);
+          
+          // Cache for background sync if offline or failed
+          await cacheUploadForBackgroundSync({
+            blob: fragment.blob,
+            fileName: fragment.name,
+            folderId: folder.id,
+            accessToken: (window as any).gapi.auth2.getAuthInstance().currentUser.get().getAuthResponse().access_token
+          });
+          
           setUploadProgress(prev => prev.map((p, idx) => 
             idx === i ? { 
               ...p, 
               status: 'error' as const, 
-              error: error instanceof Error ? error.message : 'Upload failed'
+              error: error instanceof Error ? error.message : 'Upload failed - queued for retry'
             } : p
           ));
         }
@@ -505,6 +514,124 @@ export function useGoogleDrive() {
       console.warn('Could not make file public:', error);
     }
   }, []);
+
+  // Upload file with retry logic
+  const uploadFileWithRetry = useCallback(async (
+    file: Blob,
+    fileName: string,
+    folderId: string,
+    onProgress?: (progress: number) => void,
+    maxRetries: number = 3
+  ): Promise<DriveFile> => {
+    let lastError: Error;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await uploadFile(file, fileName, folderId, onProgress);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Upload failed');
+        console.warn(`Upload attempt ${attempt}/${maxRetries} failed for ${fileName}:`, error);
+        
+        if (attempt < maxRetries) {
+          // Exponential backoff
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    throw lastError!;
+  }, [uploadFile]);
+
+  // Cache upload for background sync
+  const cacheUploadForBackgroundSync = useCallback(async (uploadData: {
+    blob: Blob;
+    fileName: string;
+    folderId: string;
+    accessToken: string;
+  }) => {
+    try {
+      // Convert blob to base64 for storage
+      const arrayBuffer = await uploadData.blob.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      
+      const syncData = {
+        fileName: uploadData.fileName,
+        folderId: uploadData.folderId,
+        accessToken: uploadData.accessToken,
+        fileData: base64,
+        mimeType: uploadData.blob.type,
+        size: uploadData.blob.size,
+        timestamp: Date.now()
+      };
+      
+      // Send to service worker for background sync
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'CACHE_UPLOAD_FOR_SYNC',
+          payload: syncData
+        });
+        
+        // Register background sync
+        const registration = await navigator.serviceWorker.ready;
+        if ('sync' in registration) {
+          await (registration as any).sync.register('google-drive-upload');
+        }
+      }
+      
+      addNotification({
+        type: 'info',
+        title: 'Upload Queued',
+        message: `${uploadData.fileName} queued for upload when connection is restored`
+      });
+    } catch (error) {
+      console.error('Error caching upload for background sync:', error);
+    }
+  }, [addNotification]);
+
+  // Check for network status and retry pending uploads
+  const retryPendingUploads = useCallback(async () => {
+    if (!navigator.onLine || !state.isGoogleAuthenticated) return;
+    
+    try {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const registration = await navigator.serviceWorker.ready;
+        if ('sync' in registration) {
+          await (registration as any).sync.register('google-drive-upload');
+        }
+      }
+    } catch (error) {
+      console.error('Error triggering background sync:', error);
+    }
+  }, [state.isGoogleAuthenticated]);
+
+  // Listen for network status changes
+  useEffect(() => {
+    const handleOnline = () => {
+      addNotification({
+        type: 'success',
+        title: 'Connection Restored',
+        message: 'Attempting to upload queued files...'
+      });
+      retryPendingUploads();
+    };
+
+    const handleOffline = () => {
+      addNotification({
+        type: 'warning',
+        title: 'Connection Lost',
+        message: 'Files will be queued for upload when connection is restored'
+      });
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [addNotification, retryPendingUploads]);
 
   // Estado del hook
   const isSignedIn = state.isGoogleAuthenticated;

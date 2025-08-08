@@ -3,8 +3,6 @@ const nextConfig = {
   // Enable React Strict Mode for better development experience
   reactStrictMode: true,
   
-  // Enable SWC minification for better performance
-  swcMinify: true,
   
   experimental: {
     // Enable server actions
@@ -16,11 +14,7 @@ const nextConfig = {
     scrollRestoration: true,
     esmExternals: true,
     // Enable modern JavaScript features
-    turbo: {
-      loaders: {
-        '.svg': ['@svgr/webpack'],
-      },
-    },
+    // turbopack configuration moved to root level in Next.js 15
   },
 
   // PWA and performance headers
@@ -233,6 +227,7 @@ const nextConfig = {
 
   // Trailing slash configuration for consistent URLs
   trailingSlash: false,
+
 
   // Bundle analyzer for development
   ...(process.env.ANALYZE === 'true' && {
